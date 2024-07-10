@@ -41,8 +41,10 @@ import java.util.List;
 public class NutFrameReader implements FrameOutput.FrameReader {
     private final FrameConsumer frameConsumer;
     private final ImageFormat imageFormat;
+    private final boolean generateImages;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NutFrameReader.class);
+
 
     /**
      * Creates {@link NutFrameReader}.
@@ -53,6 +55,21 @@ public class NutFrameReader implements FrameOutput.FrameReader {
     public NutFrameReader(final FrameConsumer frameConsumer, final ImageFormat imageFormat) {
         this.frameConsumer = frameConsumer;
         this.imageFormat = imageFormat;
+        this.generateImages = true;
+    }
+
+    /**
+     * Creates {@link NutFrameReader}.
+     *
+     * @param frameConsumer frame consumer
+     * @param imageFormat image format
+     * @param generateImages generate BufferedImage images
+     */
+    public NutFrameReader(final FrameConsumer frameConsumer, final ImageFormat imageFormat,
+                          final boolean generateImages) {
+        this.frameConsumer = frameConsumer;
+        this.imageFormat = imageFormat;
+        this.generateImages = generateImages;
     }
 
     /**
@@ -130,6 +147,7 @@ public class NutFrameReader implements FrameOutput.FrameReader {
         }
 
         BufferedImage image = null;
+        ByteBuffer buffer = null;
         int[] samples = null;
 
         if (track.streamType == StreamHeader.Type.VIDEO) {
@@ -138,7 +156,9 @@ public class NutFrameReader implements FrameOutput.FrameReader {
             // sometimes ffmpeg can send too short byte array as frame raw data for the last frame
             // ignoring such frame, anyway there will be no more frames after it
             if (frame.data.length == width * height * imageFormat.getBytesPerPixel()) {
-                image = imageFormat.toImage(frame.data, width, height);
+                buffer = ByteBuffer.wrap(frame.data);
+                if (generateImages)
+                    image = imageFormat.toImage(frame.data, width, height);
             }
         } else if (track.streamType == StreamHeader.Type.AUDIO) {
             ByteBuffer data = ByteBuffer.wrap(frame.data);
@@ -148,8 +168,13 @@ public class NutFrameReader implements FrameOutput.FrameReader {
             intData.get(samples);
         }
 
-        if (image != null || samples != null) {
-            return new Frame(track.streamId, frame.pts, image, samples);
+
+            if (generateImages && image != null)
+                return new Frame(track.streamId, frame.pts, image);
+            else if (buffer != null)
+                return new Frame(track.streamId, frame.pts, buffer);
+            else if (samples != null) {
+                return new Frame(track.streamId, frame.pts, samples);
         }
 
         return null;

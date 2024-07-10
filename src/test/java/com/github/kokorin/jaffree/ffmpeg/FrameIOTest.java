@@ -20,6 +20,8 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferByte;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -32,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class FrameIOTest {
@@ -174,7 +177,11 @@ public class FrameIOTest {
                 }
                 frame++;
 
-                return new Frame(type, pts, image, samples);
+                if (image != null)
+                    return new Frame(type, pts, image);
+                else if (samples != null)
+                    return new Frame(type, pts, samples);
+                else return null;
             }
         };
 
@@ -451,6 +458,130 @@ public class FrameIOTest {
                                     }
                                 }
                             }
+
+                            videoCounter.incrementAndGet();
+                            return;
+                        }
+
+                        int[] samples = frame.getSamples();
+                        assertNotNull(samples);
+                        sampleCounter.addAndGet(samples.length);
+                    }
+                }))
+                .execute();
+
+
+        // total number of frames can differ from expected
+        int expectedFrames = fps * duration;
+        int actualFrames = videoCounter.get();
+        assertTrue("expected: " + expectedFrames + ", actual: " + actualFrames,
+                expectedFrames == actualFrames || expectedFrames + 1 == actualFrames);
+        // total number of samples can differ in output file, assert the difference is less then 1%
+        assertEquals(1., 1. * (sampleRate * duration) / sampleCounter.get(), 0.01);
+    }
+
+    @Test
+    public void produceAndConsumeByteBufferWithAlphaChannel() throws Exception {
+        final Path tempDir = Files.createTempDirectory("jaffree");
+        Path output = tempDir.resolve("output.mkv");
+
+        int width = 480;
+        int height = 480;
+        int duration = 20;
+        int sampleRate = 44100;
+        int fps = 10;
+
+        assertEquals(0, sampleRate % fps);
+
+        BufferedImage redCross = new BufferedImage(width, height, BufferedImage.TYPE_4BYTE_ABGR);
+        Graphics2D graphics = redCross.createGraphics();
+        graphics.setPaint(Color.RED);
+        graphics.fillRect(width / 3, height / 4, width / 3, height / 2);
+        graphics.fillRect(width / 4, height / 3, width / 2, height / 3);
+
+        int[] samples = new int[sampleRate / fps];
+
+        FrameProducer frameProducer = new FrameProducer() {
+            private int videoPts = 0;
+            private int audioPts = 0;
+
+            @Override
+            public List<Stream> produceStreams() {
+                return Arrays.asList(
+                        new Stream()
+                                .setId(0)
+                                .setType(Stream.Type.VIDEO)
+                                .setWidth(width)
+                                .setHeight(height)
+                                .setTimebase((long) fps),
+                        new Stream()
+                                .setId(1)
+                                .setType(Stream.Type.AUDIO)
+                                .setSampleRate(sampleRate)
+                                .setChannels(1)
+                                .setTimebase((long) fps)
+                );
+            }
+
+            @Override
+            public Frame produce() {
+                if (videoPts > fps * duration) {
+                    return null;
+                }
+
+                if (videoPts <= audioPts) {
+                    byte[] pixelData = ((DataBufferByte) redCross.getData().getDataBuffer()).getData();
+                    ByteBuffer buffer = ByteBuffer.wrap(pixelData);
+                    return Frame.createVideoFrame(0, videoPts++, buffer);
+                }
+
+                return Frame.createAudioFrame(1, audioPts++, samples);
+            }
+        };
+
+        FFmpeg.atPath()
+                .addInput(FrameInput
+                        .withProducerAlpha(frameProducer, false)
+                        .setFrameRate(fps)
+                )
+                .addOutput(UrlOutput
+                        .toPath(output)
+                        .setCodec(StreamType.VIDEO, "ffv1")
+                )
+                .execute();
+
+        AtomicInteger videoCounter = new AtomicInteger();
+        AtomicInteger sampleCounter = new AtomicInteger();
+
+        FFmpeg.atPath()
+                .addInput(UrlInput.fromPath(output))
+                .addOutput(FrameOutput.withConsumerOutputToByteBuffer(new FrameConsumer() {
+                    @Override
+                    public void consumeStreams(List<Stream> streams) {
+                        assertEquals(2, streams.size());
+
+                        Stream video = streams.get(0);
+                        assertEquals(0, video.getId());
+                        assertEquals(Stream.Type.VIDEO, video.getType());
+                        assertEquals((Integer) width, video.getWidth());
+                        assertEquals((Integer) height, video.getHeight());
+
+                        Stream audio = streams.get(1);
+                        assertEquals(1, audio.getId());
+                        assertEquals(Stream.Type.AUDIO, audio.getType());
+                        assertEquals(Long.valueOf(sampleRate), audio.getSampleRate());
+                        assertEquals((Integer) 1, audio.getChannels());
+                    }
+
+                    @Override
+                    public void consume(Frame frame) {
+                        if (frame == null) {
+                            return;
+                        }
+
+                        if (frame.getStreamId() == 0) {
+                            assertNull(frame.getImage());
+                            assertNotNull(frame.getBuffer());
 
                             videoCounter.incrementAndGet();
                             return;

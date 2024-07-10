@@ -44,6 +44,7 @@ public class NutFrameWriter implements FrameInput.FrameWriter {
     private final FrameProducer producer;
     private final ImageFormat imageFormat;
     private final long frameOrderingBufferMillis;
+    private final boolean generateImages;
 
     //PCM Signed Differential?
     private static final byte[] FOURCC_PCM_S32BE = {32, 'D', 'S', 'P'};
@@ -63,6 +64,23 @@ public class NutFrameWriter implements FrameInput.FrameWriter {
         this.producer = producer;
         this.imageFormat = imageFormat;
         this.frameOrderingBufferMillis = frameOrderingBufferMillis;
+        this.generateImages = true;
+    }
+
+    /**
+     * Creates {@link NutFrameWriter}.
+     *
+     * @param producer                  frame producer
+     * @param imageFormat               video frames image format
+     * @param frameOrderingBufferMillis frame reordering buffer length
+     * @param generateImages generate BufferedImage images
+     */
+    public NutFrameWriter(final FrameProducer producer, final ImageFormat imageFormat,
+                          final long frameOrderingBufferMillis, final boolean generateImages) {
+        this.producer = producer;
+        this.imageFormat = imageFormat;
+        this.frameOrderingBufferMillis = frameOrderingBufferMillis;
+        this.generateImages = generateImages;
     }
 
 
@@ -182,8 +200,13 @@ public class NutFrameWriter implements FrameInput.FrameWriter {
             StreamHeader streamHeader = streamHeaders[frame.getStreamId()];
             switch (streamHeader.streamType) {
                 case VIDEO:
-                    BufferedImage image = frame.getImage();
-                    data = imageFormat.toBytes(image);
+                    if (generateImages) {
+                        BufferedImage image = frame.getImage();
+                        data = imageFormat.toBytes(image);
+                    } else {
+                        ByteBuffer buffer = frame.getBuffer();
+                        data = buffer.array();
+                    }
                     break;
 
                 case AUDIO:

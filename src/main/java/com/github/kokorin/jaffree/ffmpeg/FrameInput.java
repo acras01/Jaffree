@@ -123,6 +123,38 @@ public class FrameInput extends TcpInput<FrameInput> implements Input {
     }
 
     /**
+     * Creates {@link FrameInput} with specified frame producer.
+     * <p>
+     * Note: frame producer should produce video frames in BGR24 format.
+     *
+     * @param producer frame producer
+     * @param generateImages generate BufferedImage images
+     * @return FrameInput
+     * @see ImageFormats#BGR24
+     */
+    public static FrameInput withProducer(final FrameProducer producer,
+                                          final boolean generateImages) {
+        return withProducer(producer, ImageFormats.BGR24
+                , DEFAULT_FRAME_ORDERING_BUFFER_MILLIS, generateImages);
+    }
+
+    /**
+     * Creates {@link FrameInput} with specified frame producer with alpha channel.
+     * <p>
+     * Note: frame producer should produce video frames in ABGR format.
+     *
+     * @param producer frame producer
+     * @param generateImages generate BufferedImage images
+     * @return FrameInput
+     * @see ImageFormats#ABGR
+     */
+    public static FrameInput withProducerAlpha(final FrameProducer producer,
+                                               final boolean generateImages) {
+        return withProducer(producer, ImageFormats.ABGR,
+                DEFAULT_FRAME_ORDERING_BUFFER_MILLIS, generateImages);
+    }
+
+    /**
      * Creates {@link FrameInput} with specified frame producer and image format.
      *
      * @param producer    frame producer
@@ -154,7 +186,33 @@ public class FrameInput extends TcpInput<FrameInput> implements Input {
                                           final ImageFormat imageFormat,
                                           final long frameOrderingBufferMillis) {
         return new FrameInput(
-                new NutFrameWriter(producer, imageFormat, frameOrderingBufferMillis),
+                new NutFrameWriter(producer, imageFormat, frameOrderingBufferMillis, true),
+                "nut"
+        );
+    }
+
+    /**
+     * Creates {@link FrameInput} with specified frame producer, format and frame ordering buffer
+     * <p>
+     * Frame ordering buffer allows {@link FrameProducer} to produce frame without strict ordering
+     * (which is required by NUT format).
+     * <p>
+     * <b>Note</b>: too long frame ordering buffer may cause {@link OutOfMemoryError} or
+     * performance degradation.
+     *
+     * @param producer                  frame producer
+     * @param imageFormat               video frame image format
+     * @param frameOrderingBufferMillis frame ordering buffer milliseconds
+     * @param generateImages generate BufferedImage images
+     * @return FrameInput
+     * @see ImageFormats
+     */
+    public static FrameInput withProducer(final FrameProducer producer,
+                                          final ImageFormat imageFormat,
+                                          final long frameOrderingBufferMillis,
+                                          final boolean generateImages) {
+        return new FrameInput(
+                new NutFrameWriter(producer, imageFormat, frameOrderingBufferMillis, generateImages),
                 "nut"
         );
     }

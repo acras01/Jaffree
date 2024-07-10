@@ -167,7 +167,7 @@ public class FrameOutput extends TcpOutput<FrameOutput> implements Output {
      * @return FrameOutput
      */
     public static FrameOutput withConsumer(final FrameConsumer consumer) {
-        return withConsumer(consumer, ImageFormats.BGR24);
+        return withConsumer(consumer, ImageFormats.BGR24, true);
     }
 
     /**
@@ -177,19 +177,52 @@ public class FrameOutput extends TcpOutput<FrameOutput> implements Output {
      * @return FrameOutput
      */
     public static FrameOutput withConsumerAlpha(final FrameConsumer consumer) {
-        return withConsumer(consumer, ImageFormats.ABGR);
+        return withConsumer(consumer, ImageFormats.ABGR, true);
     }
 
-    protected static FrameOutput withConsumer(final FrameConsumer consumer,
-                                              final ImageFormat imageFormat) {
+    /**
+     * Creates {@link FrameOutput}.
+     *
+     * @param consumer frame consumer
+     * @return FrameOutput
+     */
+    public static FrameOutput withConsumerOutputToByteBuffer(final FrameConsumer consumer) {
         return new FrameOutput(
-                new NutFrameReader(consumer, imageFormat),
-                "nut", "rawvideo", imageFormat.getPixelFormat(), "pcm_s32be"
+                new NutFrameReader(consumer, ImageFormats.BGR24, false),
+                "nut", "rawvideo", ImageFormats.BGR24.getPixelFormat(), "pcm_s32be"
+        );
+    }
+
+    /**
+     * Creates {@link FrameOutput}.
+     *
+     * @param consumer frame consumer
+     * @return FrameOutput
+     */
+    public static FrameOutput withConsumerOutputToByteBufferAlpha(final FrameConsumer consumer) {
+        return new FrameOutput(
+                new NutFrameReader(consumer, ImageFormats.ABGR, false),
+                "nut", "rawvideo", ImageFormats.ABGR.getPixelFormat(), "pcm_s32be"
         );
     }
 
     protected interface FrameReader {
         void read(InputStream inputStream) throws IOException;
+    }
+
+    /**
+     * Creates {@link FrameOutput}.
+     *
+     * @param consumer frame consumer
+     * @param imageFormat image format
+     * @return FrameOutput
+     */
+    protected static FrameOutput withConsumer(final FrameConsumer consumer, final ImageFormat imageFormat,
+                                              final boolean generateImages) {
+        return new FrameOutput(
+                new NutFrameReader(consumer, imageFormat, generateImages),
+                "nut", "rawvideo", imageFormat.getPixelFormat(), "pcm_s32be"
+        );
     }
 
     /**
