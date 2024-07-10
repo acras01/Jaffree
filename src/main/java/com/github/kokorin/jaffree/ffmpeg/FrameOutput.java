@@ -189,7 +189,8 @@ public class FrameOutput extends TcpOutput<FrameOutput> implements Output {
     public static FrameOutput withConsumerOutputToByteBuffer(final FrameConsumer consumer) {
         return new FrameOutput(
                 new NutFrameReader(consumer, ImageFormats.BGR24, false),
-                "nut", "rawvideo", ImageFormats.BGR24.getPixelFormat(), "pcm_s32be"
+                "nut", "rawvideo", ImageFormats.BGR24.getPixelFormat(),
+                "pcm_s32be"
         );
     }
 
@@ -202,7 +203,8 @@ public class FrameOutput extends TcpOutput<FrameOutput> implements Output {
     public static FrameOutput withConsumerOutputToByteBufferAlpha(final FrameConsumer consumer) {
         return new FrameOutput(
                 new NutFrameReader(consumer, ImageFormats.ABGR, false),
-                "nut", "rawvideo", ImageFormats.ABGR.getPixelFormat(), "pcm_s32be"
+                "nut", "rawvideo", ImageFormats.ABGR.getPixelFormat(),
+                "pcm_s32be"
         );
     }
 
@@ -215,13 +217,16 @@ public class FrameOutput extends TcpOutput<FrameOutput> implements Output {
      *
      * @param consumer frame consumer
      * @param imageFormat image format
+     * @param generateImages generate BufferedImage
      * @return FrameOutput
      */
-    protected static FrameOutput withConsumer(final FrameConsumer consumer, final ImageFormat imageFormat,
+    protected static FrameOutput withConsumer(final FrameConsumer consumer,
+                                              final ImageFormat imageFormat,
                                               final boolean generateImages) {
         return new FrameOutput(
                 new NutFrameReader(consumer, imageFormat, generateImages),
-                "nut", "rawvideo", imageFormat.getPixelFormat(), "pcm_s32be"
+                "nut", "rawvideo", imageFormat.getPixelFormat(),
+                "pcm_s32be"
         );
     }
 

@@ -47,7 +47,7 @@ public class Frame {
      */
     protected Frame(final int streamId, final long pts, final int[] samples) {
         if (samples == null) {
-            throw new IllegalArgumentException( "Samples parameter must be non null");
+            throw new IllegalArgumentException("Samples parameter must be non null");
         }
 
         this.streamId = streamId;

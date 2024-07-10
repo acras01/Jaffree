@@ -134,8 +134,8 @@ public class FrameInput extends TcpInput<FrameInput> implements Input {
      */
     public static FrameInput withProducer(final FrameProducer producer,
                                           final boolean generateImages) {
-        return withProducer(producer, ImageFormats.BGR24
-                , DEFAULT_FRAME_ORDERING_BUFFER_MILLIS, generateImages);
+        return withProducer(producer, ImageFormats.BGR24,
+                DEFAULT_FRAME_ORDERING_BUFFER_MILLIS, generateImages);
     }
 
     /**
@@ -212,7 +212,8 @@ public class FrameInput extends TcpInput<FrameInput> implements Input {
                                           final long frameOrderingBufferMillis,
                                           final boolean generateImages) {
         return new FrameInput(
-                new NutFrameWriter(producer, imageFormat, frameOrderingBufferMillis, generateImages),
+                new NutFrameWriter(producer, imageFormat,
+                        frameOrderingBufferMillis, generateImages),
                 "nut"
         );
     }

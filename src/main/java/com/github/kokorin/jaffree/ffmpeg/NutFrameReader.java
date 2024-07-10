@@ -157,8 +157,9 @@ public class NutFrameReader implements FrameOutput.FrameReader {
             // ignoring such frame, anyway there will be no more frames after it
             if (frame.data.length == width * height * imageFormat.getBytesPerPixel()) {
                 buffer = ByteBuffer.wrap(frame.data);
-                if (generateImages)
+                if (generateImages) {
                     image = imageFormat.toImage(frame.data, width, height);
+                }
             }
         } else if (track.streamType == StreamHeader.Type.AUDIO) {
             ByteBuffer data = ByteBuffer.wrap(frame.data);
@@ -169,12 +170,12 @@ public class NutFrameReader implements FrameOutput.FrameReader {
         }
 
 
-            if (generateImages && image != null)
-                return new Frame(track.streamId, frame.pts, image);
-            else if (buffer != null)
-                return new Frame(track.streamId, frame.pts, buffer);
-            else if (samples != null) {
-                return new Frame(track.streamId, frame.pts, samples);
+        if (generateImages && image != null) {
+            return new Frame(track.streamId, frame.pts, image);
+        } else if (buffer != null) {
+            return new Frame(track.streamId, frame.pts, buffer);
+        } else if (samples != null) {
+            return new Frame(track.streamId, frame.pts, samples);
         }
 
         return null;
