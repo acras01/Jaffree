@@ -100,95 +100,22 @@ public class NutFrameWriter implements FrameInput.FrameWriter {
 
     @SuppressWarnings("checkstyle:magicnumber")
     private void write(final NutWriter writer) throws IOException {
-        List<Stream> tracks = producer.produceStreams();
-        LOGGER.debug("Streams: {}", tracks.toArray());
+        List<Stream> streams = producer.produceStreams();
+        LOGGER.debug("Streams: {}", streams.toArray());
 
-        StreamHeader[] streamHeaders = new StreamHeader[tracks.size()];
-        Rational[] timebases = new Rational[tracks.size()];
+        StreamHeader[] streamHeaders = new StreamHeader[streams.size()];
+        Rational[] timebases = new Rational[streams.size()];
 
         for (int i = 0; i < streamHeaders.length; i++) {
-            Stream stream = tracks.get(i);
-            if (stream.getId() != i) {
-                throw new JaffreeException("Stream ids must start with 0 and "
-                        + "increase by 1 subsequently!");
-            }
-            final StreamHeader streamHeader;
+            Stream stream = streams.get(i);
+            validateStream(stream, i);
 
-            Objects.requireNonNull(stream.getType(), "Stream type must be specified");
-            Objects.requireNonNull(stream.getTimebase(), "Stream timebase must be specified");
-
-            switch (stream.getType()) {
-                case VIDEO:
-                    Objects.requireNonNull(stream.getWidth(), "Width must be specified");
-                    Objects.requireNonNull(stream.getHeight(), "Height must be specified");
-                    streamHeader = new StreamHeader(
-                            stream.getId(),
-                            StreamHeader.Type.VIDEO,
-                            imageFormat.getFourCC(),
-                            i,
-                            0,
-                            60_000,
-                            0,
-                            EnumSet.noneOf(StreamHeader.Flag.class),
-                            new byte[0],
-                            new StreamHeader.Video(
-                                    stream.getWidth(),
-                                    stream.getHeight(),
-                                    1,
-                                    1,
-                                    StreamHeader.ColourspaceType.UNKNOWN
-                            ),
-                            null
-                    );
-                    break;
-                case AUDIO:
-                    Objects.requireNonNull(stream.getSampleRate(),
-                            "Samplerate must be specified");
-                    Objects.requireNonNull(stream.getChannels(),
-                            "Number of channels must be specified");
-                    streamHeader = new StreamHeader(
-                            stream.getId(),
-                            StreamHeader.Type.AUDIO,
-                            FOURCC_PCM_S32BE,
-                            i,
-                            0,
-                            60_000,
-                            0,
-                            EnumSet.noneOf(StreamHeader.Flag.class),
-                            new byte[0],
-                            null,
-                            new StreamHeader.Audio(
-                                    new Rational(stream.getSampleRate(), 1),
-                                    stream.getChannels()
-                            )
-                    );
-                    break;
-                default:
-                    throw new JaffreeException("Unknown Track Type: " + stream.getType());
-            }
-
+            StreamHeader streamHeader = createStreamHeader(stream, i);
             streamHeaders[i] = streamHeader;
             timebases[i] = new Rational(1, stream.getTimebase());
         }
 
-        int framecodesLength = 256;
-        FrameCode[] frameCodes = new FrameCode[framecodesLength];
-        frameCodes[0] = FrameCode.INVALID;
-        frameCodes[1] = new FrameCode(
-                EnumSet.of(FrameCode.Flag.CODED_FLAGS),
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                0
-        );
-        for (int i = 2; i < framecodesLength; i++) {
-            frameCodes[i] = FrameCode.INVALID;
-        }
-
-        writer.setMainHeader(tracks.size(), Short.MAX_VALUE, timebases, frameCodes);
+        writer.setMainHeader(streams.size(), Short.MAX_VALUE, timebases, createFrameCodes());
         writer.setStreamHeaders(streamHeaders);
         writer.setInfos(new Info[0]);
 
@@ -196,29 +123,7 @@ public class NutFrameWriter implements FrameInput.FrameWriter {
         while ((frame = producer.produce()) != null) {
             LOGGER.trace("Frame: {}", frame);
 
-            final byte[] data;
-            StreamHeader streamHeader = streamHeaders[frame.getStreamId()];
-            switch (streamHeader.streamType) {
-                case VIDEO:
-                    if (generateImages) {
-                        BufferedImage image = frame.getImage();
-                        data = imageFormat.toBytes(image);
-                    } else {
-                        ByteBuffer buffer = frame.getBuffer();
-                        data = buffer.array();
-                    }
-                    break;
-
-                case AUDIO:
-                    data = new byte[frame.getSamples().length * 4];
-                    ByteBuffer.wrap(data).asIntBuffer().put(frame.getSamples());
-                    break;
-
-                default:
-                    throw new JaffreeException("Unexpected track: " + streamHeader.streamId
-                            + ", type: " + streamHeader.streamType);
-            }
-
+            byte[] data = convertFrameData(frame, streamHeaders[frame.getStreamId()]);
             NutFrame nutFrame = new NutFrame(
                     frame.getStreamId(),
                     frame.getPts(),
@@ -231,6 +136,100 @@ public class NutFrameWriter implements FrameInput.FrameWriter {
 
             LOGGER.trace("NutFrame: {}", nutFrame);
             writer.writeFrame(nutFrame);
+        }
+    }
+
+    private void validateStream(Stream stream, int expectedId) {
+        if (stream.getId() != expectedId) {
+            throw new JaffreeException("Stream ids must start with 0 and increase by 1 subsequently!");
+        }
+        Objects.requireNonNull(stream.getType(), "Stream type must be specified");
+        Objects.requireNonNull(stream.getTimebase(), "Stream timebase must be specified");
+    }
+
+    private StreamHeader createStreamHeader(Stream stream, int streamId) {
+        switch (stream.getType()) {
+            case VIDEO:
+                return createVideoStreamHeader(stream, streamId);
+            case AUDIO:
+                return createAudioStreamHeader(stream, streamId);
+            default:
+                throw new JaffreeException("Unknown Track Type: " + stream.getType());
+        }
+    }
+
+    private StreamHeader createVideoStreamHeader(Stream stream, int streamId) {
+        Objects.requireNonNull(stream.getWidth(), "Width must be specified");
+        Objects.requireNonNull(stream.getHeight(), "Height must be specified");
+
+        return new StreamHeader(
+                streamId,
+                StreamHeader.Type.VIDEO,
+                imageFormat.getFourCC(),
+                streamId,
+                0,
+                60_000,
+                0,
+                EnumSet.noneOf(StreamHeader.Flag.class),
+                new byte[0],
+                new StreamHeader.Video(stream.getWidth(), stream.getHeight(), 1, 1,
+                        StreamHeader.ColourspaceType.UNKNOWN),
+                null
+        );
+    }
+
+    private StreamHeader createAudioStreamHeader(Stream stream, int streamId) {
+        Objects.requireNonNull(stream.getSampleRate(), "Samplerate must be specified");
+        Objects.requireNonNull(stream.getChannels(), "Number of channels must be specified");
+
+        return new StreamHeader(
+                streamId,
+                StreamHeader.Type.AUDIO,
+                FOURCC_PCM_S32BE,
+                streamId,
+                0,
+                60_000,
+                0,
+                EnumSet.noneOf(StreamHeader.Flag.class),
+                new byte[0],
+                null,
+                new StreamHeader.Audio(new Rational(stream.getSampleRate(), 1),
+                        stream.getChannels())
+        );
+    }
+
+    private FrameCode[] createFrameCodes() {
+        FrameCode[] frameCodes = new FrameCode[256];
+        frameCodes[0] = FrameCode.INVALID;
+        frameCodes[1] = new FrameCode(
+                EnumSet.of(FrameCode.Flag.CODED_FLAGS),
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0
+        );
+
+        for (int i = 2; i < frameCodes.length; i++) {
+            frameCodes[i] = FrameCode.INVALID;
+        }
+
+        return frameCodes;
+    }
+
+    private byte[] convertFrameData(Frame frame, StreamHeader streamHeader) {
+        switch (streamHeader.streamType) {
+            case VIDEO:
+                return generateImages ? imageFormat.toBytes(frame.getImage()) : frame.getBuffer().array();
+            case AUDIO:
+                byte[] data = new byte[frame.getSamples().length * 4];
+                ByteBuffer.wrap(data).asIntBuffer().put(frame.getSamples());
+                return data;
+            default:
+                throw new JaffreeException("Unexpected track: " + streamHeader.streamId +
+                        ", type: " + streamHeader.streamType);
         }
     }
 }
